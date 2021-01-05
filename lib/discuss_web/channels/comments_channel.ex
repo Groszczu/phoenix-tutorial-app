@@ -1,7 +1,7 @@
 defmodule DiscussWeb.CommentsChannel do
   use DiscussWeb, :channel
 
-  alias Discuss.{Repo, Topic, Comment}
+  alias Discuss.{Repo, Topic, Comment, User}
   alias DiscussWeb.CommentView
 
   def join("comments:" <> topic_id, _payload, socket) do
@@ -10,20 +10,22 @@ defmodule DiscussWeb.CommentsChannel do
     topic =
       Topic
       |> Repo.get!(topic_id)
-      |> Repo.preload(:comments)
+      |> Repo.preload(comments: [:user])
 
     comments = CommentView.render("index.json", %{comments: topic.comments})
 
-    {:ok, %{comments: comments}, assign(socket, :topic, topic)}
+    {:ok, comments, assign(socket, :topic, topic)}
   end
 
   def handle_in("comments:new", %{"content" => content}, socket) do
     topic = socket.assigns.topic
+    user = Repo.get!(User, socket.assigns.user_id)
 
     changeset =
       topic
       |> Ecto.build_assoc(:comments)
       |> Comment.changeset(%{content: content})
+      |> Ecto.Changeset.put_assoc(:user, user)
 
     case Repo.insert(changeset) do
       {:ok, comment} ->
@@ -36,7 +38,5 @@ defmodule DiscussWeb.CommentsChannel do
       {:error, _reason} ->
         {:reply, {:error, %{errors: changeset}}, socket}
     end
-
-    {:reply, :ok, socket}
   end
 end
